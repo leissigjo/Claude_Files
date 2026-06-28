@@ -1,0 +1,12 @@
+session-env/
+sessions/
+telemetry/
+file-history/
+.credentials.json
+shell-snapshots/
+backups/
+.last-cleanup
+.claude.code-workspace
+ide/
+*.jsonl
+*.meta.json
