@@ -118,8 +118,8 @@ Jede Entität = ein Sheet-Tab. JSON-Felder (`settings_json`, `fields_json`) erm�
 ```
 Gruppen          (group_id, name, slug, settings_json, created_at)
 Profile          (profile_id, email, token, display_name, preferences_json, badges_json, created_at)
-Anlässe          (event_id, group_id, type, title, date, start, phase [0-7], location,
-                  max_participants, settings_json, created_at, closed_at)
+Anlässe          (event_id, group_id, type, template_id, title, date, start, phase [0-7], location,
+                  max_participants, settings_json, fields_snapshot_json, created_at, closed_at)
 Anlass-Typ-Felder (type, field_key, field_label, field_type, required, sort_order)
 Einträge         (entry_id, event_id, profile_id, status, fields_json, action_token, created_at, updated_at)
 Email-Log        (log_id, profile_id, event_id, template_key, sent_at, status)
@@ -132,6 +132,8 @@ System-Logs      (timestamp, level, function_name, event_id, profile_id, message
 - `group_id` ab sofort auf allen Entitäten: vorbereitet Multi-Tenancy ohne Daten-Migration
 - `profile_id` auf Einträgen (nicht nur E-Mail): ermöglicht Historienabfragen auch nach Namensänderungen
 - Archiv: kein separater Tab → `status`-Feld + Zeitstempel; historische Versionen via `version`-Feld
+- `template_id` (nullable): null für v2-Events; ab v3 Referenz auf Template-Objekt (→ ADR-10)
+- `fields_snapshot_json`: wird beim Übergang zu Phase 2 (INVITATION) gesetzt und danach nicht mehr verändert; sichert Vorwärtskompatibilität bei v3-Upgrade (→ ADR-10)
 
 **Kritische Dateien für Schema-Anpassung:**
 - [assets/Code_pizza_1.gs](assets/Code_pizza_1.gs) — `initSheets()` ab Zeile ~50 definiert alle Sheet-Strukturen
@@ -237,6 +239,113 @@ sessionStorage.setItem('admin_token', inputToken);
 
 ---
 
+### ADR-10: Vorwärtskompatibilität v2→v3 (Template Engine Migration)
+
+**Entscheidung: Field-Snapshot auf Event-Entität beim Phase-2-Übergang; automatisches Migrations-Skript via Schema-Versionskennung.**
+
+**Problem:** v3.0 macht `Anlass-Typ-Felder` zur admin-definierbaren Ressource (Template Engine). V2-Events referenzieren `type = "bbq"` — nach einem v3-Upgrade könnte dieser Typ verändert oder der Tab restrukturiert worden sein. Laufende Events würden ihre Feld-Konfiguration verlieren; Anmeldeformulare wären nicht mehr darstellbar.
+
+---
+
+**Teil 1 – Field-Snapshot bei Phasenübergang (präventiv, ab v2 einzubauen)**
+
+Beim Übergang zu Phase 2 (INVITATION) legt `EventLifecycleService` einen unveränderlichen JSON-Snapshot der Felder an:
+
+```javascript
+advanceToNextPhase(eventId) {
+  const event = this.eventRepo.findById(eventId);
+  event.advancePhase();
+
+  // Snapshot einmalig beim Übergang zu INVITATION setzen
+  if (event.phase === EventPhase.INVITATION && !event.fieldsSnapshot) {
+    const fields = this.typeFieldRepo.findByType(event.type);
+    event.fieldsSnapshot = { version: 2, fields };
+  }
+
+  this.eventRepo.save(event);
+  return event;
+}
+```
+
+Der Snapshot wird in `fields_snapshot_json` (ADR-4) gespeichert und danach nie mehr überschrieben.
+
+---
+
+**Teil 2 – Dualer Lesepfad in v3**
+
+v3-Code prüft beim Rendern eines Events immer zuerst den Snapshot:
+
+```javascript
+function resolveFields(event) {
+  // Events ab Phase 2: Snapshot ist einzige Wahrheitsquelle
+  if (event.fieldsSnapshot && event.phase >= EventPhase.INVITATION) {
+    return event.fieldsSnapshot.fields;
+  }
+  // v3-Event noch im Entwurf (Phase 0–1) mit Template
+  if (event.templateId) {
+    return templateRepo.getFields(event.templateId);
+  }
+  // v2-Fallback: Event noch in Phase 0–1, kein Snapshot, kein templateId
+  return typeFieldRepo.findByType(event.type);
+}
+```
+
+---
+
+**Teil 3 – Selbstauslösendes Migrations-Skript (damit es nicht vergessen werden kann)**
+
+Das Skript wird nicht manuell aufgerufen, sondern ist Teil der Applikations-Initialisierung. Ein `schema_version`-Eintrag im Config-Tab steuert, ob und welche Migrationen noch ausstehen:
+
+```javascript
+// Wird bei jedem GAS-Start in doGet/doPost aufgerufen
+function runPendingMigrations() {
+  const currentVersion = configRepo.getSchemaVersion(); // z.B. 2
+  if (currentVersion < 3) {
+    migrateV2FieldSnapshots();
+    configRepo.setSchemaVersion(3);
+  }
+}
+
+function migrateV2FieldSnapshots() {
+  const events = eventRepo.findAll();
+  for (const event of events) {
+    if (!event.fieldsSnapshot && event.phase >= EventPhase.INVITATION) {
+      event.fieldsSnapshot = {
+        version: 2,
+        fields: typeFieldRepo.findByType(event.type)
+      };
+      eventRepo.save(event);
+    }
+  }
+  Logger.log(`[Migration v3] Field-Snapshots für ${events.length} Events geprüft.`);
+}
+```
+
+`schema_version` liegt als Zeile im bestehenden System-Logs-Tab oder in einem dedizierten Config-Tab. Das Skript ist **idempotent**: Wenn es ein zweites Mal läuft, überspringt es Events, die bereits einen Snapshot haben.
+
+---
+
+**Schema-Ergänzung für Config-Tab (neu, ADR-4 Erweiterung):**
+
+```
+Config   (key, value)
+         z.B.: ("schema_version", "3"), ("migration_v3_ran_at", "2026-xx-xx")
+```
+
+---
+
+**Garantien nach dem Upgrade:**
+
+| Szenario | Verhalten |
+|----------|-----------|
+| v2-Event in Phase 3 (Anmeldung läuft), Deploy von v3 | Migrations-Skript läuft automatisch beim nächsten Request; Snapshot rückwirkend erstellt → keine Unterbrechung |
+| Admin ändert BBQ-Template in v3 | Laufende BBQ-Events verwenden unverändert ihren Snapshot |
+| Migrations-Skript "vergessen" zu deployen | Nicht möglich — es ist in `doGet/doPost` eingebettet und läuft selbst |
+| Neues Event in v3 erstellt | Kein Snapshot bis Phase 1; Snapshot-Erstellung bei Phase-2-Übergang wie gewohnt |
+| Skript läuft versehentlich zweimal | Keine Wirkung — idempotent |
+
+---
+
 ## Migrations-Roadmap
 
 ```
@@ -263,7 +372,10 @@ v2.0 (Feature-Ausbau)
 v3.0 (Template Engine)
   ├── Wenn hier: GAS-Migration ist wahrscheinlich notwendig
   ├── Cloudflare Workers + D1 oder Supabase als DB
-  └── Template-Editor für Organisatorinnen im Admin
+  ├── Template-Editor für Organisatorinnen im Admin
+  ├── Config-Tab anlegen mit schema_version = 3
+  ├── runPendingMigrations() in doGet/doPost einbetten (→ ADR-10)
+  └── Field-Snapshot-Backfill läuft automatisch beim ersten v3-Request (→ ADR-10)
 ```
 
 ---

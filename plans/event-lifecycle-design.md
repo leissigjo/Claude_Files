@@ -37,8 +37,17 @@ v2.0 — Multi-Event-Typ mit typ-spezifischen Feldern
 v2.1 — Wetterintegration (Wanderung-Feature)
        Optionaler Plan-B-Block, Admin kann "Event gefährdet" flaggen
 
+v2.2 — [L-V] Verein-Modus (Multi-Admin + Event-Kopieren)           ← NEU
+       Mehrere Admin-Tokens pro Anlass, Event aus Vorlage kopieren,
+       optionaler Vereinsname/Logo in der Einladungsseite,
+       fixer Wiederholungsrhythmus (monatlich etc.)
+
 v3.0 — Template Engine
        Admin definiert Event-Typen selbst, vollständig datengetrieben
+
+v3.1 — [L-V] Mitgliederverwaltung (Vereins-Stammliste)             ← NEU
+       Opt-in-Stammliste: Gruppe einmalig aufbauen, bei jedem neuen
+       Anlass automatisch einladen (kein manuelles Teilen des Links)
 ```
 
 **Grenzziehung:** Major-Sprung = Breaking Schema Change. Minor = additiv ohne Backend-Break.
@@ -201,23 +210,42 @@ Diese Faktoren bestimmen, welche Felder und Fragen bei der Eventerfassung notwen
 
 | Persona | Beschreibung |
 |---|---|
-| **Lotta (Organisatorin)** | Hat eine Idee, will keine Sekretärin der Gruppe sein |
+| **Lotta-P (Privatperson-Organisatorin)** | Hat eine spontane Idee, organisiert einmalig oder selten, ist alleinige Admin, will keine Sekretärin der Gruppe sein |
+| **Lotta-V (Verein-Organisatorin)** | Organisiert wiederkehrende Anlässe (Monats-Stammtisch, Vereinsabend), teilt Admin-Rechte mit 1–3 weiteren Personen, denkt in Saisons statt in Einzelevents |
 | **Moritz (Stammteilnehmer)** | Kommt meistens, hasst Bürokratie |
 | **Inge (Zurückhaltende)** | Würde gerne dabei sein, zu viele Hürden schrecken ab |
 | **Felix (Gelegenheitsbrowser)** | Hat den Link geteilt bekommen, kennt den Kontext nicht |
 | **Cem (Wiederkommer)** | War letztes Mal dabei, fragt sich: "Findet das nochmal statt?" |
 
+### Lotta-P vs. Lotta-V: Unterschiede und Implikationen
+
+| Dimension | Lotta-P (Privatperson) | Lotta-V (Verein) |
+|---|---|---|
+| **Häufigkeit** | Einmalig oder sporadisch | Wiederkehrend (monatlich, saisonal) |
+| **Admin-Anzahl** | 1 Person | 2–4 Personen (Vorstand / Team) |
+| **Event-Erstellung** | Jedes Mal neu von Grund auf | Template aus letztem Anlass kopieren |
+| **Teilnehmerkreis** | Wechselnder Freundeskreis | Fester Mitgliederkreis + Gäste |
+| **Terminlogik** | Ad-hoc, Doodle nötig | Fixtermin (z. B. 1. Dienstag/Monat) |
+| **Organisationskontext** | Kein Vereinsname/Logo | Vereinsname, ggf. Logo, eigene URL |
+| **Mitgliederverwaltung** | Nicht relevant | Wünschenswert (Stammliste, Opt-in) |
+| **Rollenübergabe** | Selten | Wichtig (Vorstandswechsel, Vertretung) |
+| **Primäre Motivation** | Aufwand sparen, Spass haben | Verlässlichkeit, Professionalität, Entlastung |
+
+**Wo dies Auswirkungen hat → Abschnitte mit `[L-V]`-Markierung im Dokument.**
+
 ---
 
 ## Phase 0 – Keimzelle: Die Idee entsteht
 
-**Wer:** Lotta, Cem | **Zustand:** "Lass uns wieder eine Pizzarunde machen." Noch kein Datum.
+**Wer:** Lotta-P oder Lotta-V, Cem | **Zustand:** "Lass uns wieder eine Pizzarunde machen." Noch kein Datum.
 
 **Hypothesen:**
 - Potenzielle Organisatorinnen verwerfen Event-Ideen weil der Aufwand (WhatsApp + Doodle + Formular) abschreckt. → **Test:** Interview: "Hattest du mal eine Idee, die du nicht weiterverfolgt hast?"
 - Minimal-Start (nur Titel + Beschreibung) senkt die Abbruchrate signifikant. → **Test:** A/B-Test Vollformular vs. Minimal-Start.
 - Wiederkommer (Cem) werden Organisatoren, wenn ein vergangener Anlass als Vorlage dient ("Kopieren"). → **Test:** Nutzerbefragung nach Event.
 - In Gruppen ohne Struktur fühlt sich niemand zuständig – das ist der eigentliche Blocker. → **Test:** Tiefeninterview: Kommt "Niemand fühlt sich verantwortlich" spontan?
+- **[L-V]** Für Vereine entsteht keine neue Idee – der Termin ist der Blocker: "Wer stellt diesmal das Formular auf?" Multi-Admin löst dies, weil die Aufgabe delegierbar wird. → **Test:** Interview Verein-Organisatorin: "Was ist der häufigste Grund, dass ein Anlass trotz Fixtermin nicht stattfindet?"
+- **[L-V]** "Event aus letztem Mal kopieren" (Datum +1 Monat, Vorlage übernehmen) ist für Vereine wertvoller als ein Leerformular. → **Test:** Completion-Rate "Kopieren" vs. "Neu erstellen" in Verein-Kontext.
 
 ---
 
@@ -301,6 +329,9 @@ Diese Faktoren bestimmen, welche Felder und Fragen bei der Eventerfassung notwen
 - Gruppen mit 2+ Events über dieselbe Plattform zeigen deutlich höhere Wiederkehrrate. → **Test:** Kohorten-Analyse nach 6 Monaten.
 - "Nächsten Anlass erstellen"-Prompt direkt beim Event-Abschluss nutzt vorhandene Energie. → **Test:** Conversion vs. spätere E-Mail.
 - Teilnehmer wollen die Organisator-Rolle nicht zweimal hintereinander – Rotations-Wunsch. → **Test:** Bestätigen >50% in Interviews?
+- **[L-V]** Für Vereine ist Wiederengagement kein Problem – das Problem ist Kontinuität ohne Burnout. Das System muss die organisierende Person entlasten, nicht motivieren. → **Test:** Interview: "Was kostet dich am meisten Zeit bei jedem Anlass neu?"
+- **[L-V]** Ein fixer Wiederholungsrhythmus ("Jeden ersten Dienstag") reduziert die Organisationsarbeit auf das Minimum: Bestätigen statt Planen. → **Test:** Completion-Rate "Rhythmus-Modus" vs. Standard bei Vereinen.
+- **[L-V]** Bei Vorstandswechsel (Admin-Übergabe) bricht die Event-Kontinuität ab, weil der neue Vorstand den Zugang verliert. Token-basierte Admin-Übergabe verhindert dies. → **Test:** Anteil abgebrochener Vereins-Event-Serien nach Personenwechsel.
 
 ---
 
@@ -348,6 +379,7 @@ Event-Typ-Vorlagen können Standard-Helfer-Slots mitbringen:
 - Ist ein Helfer auch Gast? → **Standard: Ja**, Helfer ist gleichzeitig eingeladen; Ausnahme explizit markierbar.
 - Können Helfer einander sehen? → Ja, sinnvoll für Koordination ("Cem macht das Grillieren, du nimmst den Auf-/Abbau").
 - Gibt es eine Kapazitäts-Obergrenze pro Slot? → Ja, definiert beim Erstellen des Slots.
+- **[L-V]** Sind Helfer-Slots bei Vereinen formale Rollen (Kassierer, Schriftführer) oder Event-spezifische Aufgaben? → Unterschied in Persistenz: Vereins-Rolle gilt über alle Events, Event-Slot gilt einmalig. Ab v3.1 wäre eine persistente Rollen-Ebene denkbar.
 
 ### Hypothesen zum Helfer-Konzept
 
@@ -394,6 +426,20 @@ Das Profil-Prinzip reichert mehrere Phasen an:
 | 6 – Nachbereitung | Event dem Profil-Verlauf hinzufügen | "Du warst bei 5 Pizzamittagen dabei" |
 | 7 – Wiederengagement | Passende Folge-Events vorschlagen | Persönliche Event-Liste mit kommenden Anlässen |
 
+**[L-V] Verein-Erweiterung: Organisations-Profil**
+
+Für Vereine gibt es neben dem persönlichen Nutzer-Profil eine zweite Profilschicht – das **Org-Profil**:
+
+| Inhalt | Beschreibung |
+|---|---|
+| Vereinsname + optionales Logo | Erscheint auf Einladungsseite statt anonymem Link |
+| Admin-Team | Welche Personen haben Admin-Zugang (Token-basiert) |
+| Event-Verlauf (Org-Ebene) | Alle vergangenen Anlässe des Vereins, nicht nur einzelner Personen |
+| Stammliste | Opt-in-Liste der Mitglieder: automatisch einladen statt Link teilen |
+| Rhythmus-Konfiguration | "1. Dienstag jeden Monats" – nächsten Termin vorschlagen |
+
+Das Org-Profil ist nicht zwingend; es aktiviert sich, wenn Lotta-V beim Erstellen "Ich organisiere für eine Gruppe/Verein" wählt.
+
 **Was sieht der Nutzer im Profil? (Hypothesen)**
 
 Neben angemeldeten und vergangenen Events gibt es weitere Profil-Inhalte – hier als testbare Hypothesen:
@@ -436,7 +482,7 @@ Klar sichtbare Verhaltenserwartungen sind Teil der Community-Pflege – sie sch�
 |---|---|---|
 | "Erstorganisator"-Badge | Wer zum ersten Mal organisiert, erhält ein sichtbares Abzeichen im Profil | Badge erhöht Stolz und Bereitschaft, es nochmals zu tun |
 | "Zuverlässige Gastgeberin"-Status | Ab X organisierten Events, die erfolgreich durchgeführt wurden | Teilnehmer vertrauen Anlässen bekannter Organisatoren mehr |
-| "Rotierender Organisator"-Anreiz | System schlägt aktiv nächste Person vor + würdigt die aktuell organisierende | Verhindert, dass immer dieselbe Person muss |
+| "Rotierender Organisator"-Anreiz **[L-V]** | System schlägt aktiv nächste Person vor + würdigt die aktuell organisierende | Verhindert, dass immer dieselbe Person muss – besonders relevant für Vereine mit fixer Gruppe |
 | Teilnahme-Streak | "Du warst bei 5 Events dabei" – keine Punkte, nur Sichtbarkeit | Soziale Bestätigung motiviert zur Kontinuität |
 
 **Malus für fehlende Rückmeldungen:**
@@ -509,7 +555,8 @@ Das Post-Event-E-Mail schliesst den Kreislauf und füttert das Profil:
 
 | Schritt | Methode | Ziel |
 |---|---|---|
-| Empathize | 5 Interviews Organizer-Typ (Lotta) | Pain Points Phase 0–1 |
+| Empathize | 3 Interviews Lotta-P (Privatperson) | Pain Points Phase 0–1, Einzel-Event |
+| Empathize | 3 Interviews Lotta-V (Verein) | Multi-Admin-Bedarf, Rhythmus-Logik, Übergabe |
 | Empathize | 5 Interviews Teilnehmer-Typ (Moritz/Inge) | Hürden Anmeldung & Engagement |
 | Define | "How Might We"-Workshop | Kernproblem schärfen |
 | Ideate | Crazy 8s für Phase 1 (Terminsuche) | Schnellste Time-to-Value |

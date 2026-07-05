@@ -10,3 +10,4 @@ backups/
 ide/
 *.jsonl
 *.meta.json
+projects/
